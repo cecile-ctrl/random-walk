@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <title>Random Walk Challenge</title>
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      width: 100%;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    #startScreen, #goalReachedScreen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #4c66af, #2e477d);
+      color: white;
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 999;
+    }
+    button {
+      padding: 12px 24px;
+      font-size: 18px;
+      background: #fff;
+      color: #2E7D32;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+      margin-top: 10px;
+    }
+    button:hover { background: #f0f0f0; }
+    #info {
+      margin-top: 20px;
+      font-size: 20px;
+      text-align: center;
+    }
+    #map { height: 100vh; width: 100%; display: none; }
+  </style>
+</head>
+<body>
+
+<div id="startScreen">
+  <h1>Random Walk Challenge</h1>
+  <button id="startBtn">Start random wandeling</button>
+  <div id="info"></div>
+</div>
+
+<div id="goalReachedScreen" style="display:none;">
+  <h1>Doel bereikt!</h1>
+  <button id="restartBtn">Opnieuw</button>
+</div>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script>
+  let map, playerMarker, goalMarker, goalCoords, center;
+  const maxDistance = 100; // max 500 meter vanaf start
+  const revealDistance = 5; // pas tonen kaart bij 5 meter
+  const infoDiv = document.getElementById("info");
+
+  function getRandomPoint(center, maxRadius) {
+    const angle = Math.random() * 2 * Math.PI;
+    const distance = Math.random() * maxRadius;
+    const deltaLat = (distance / 111320) * Math.cos(angle);
+    const deltaLon = (distance / (111320 * Math.cos(center[0] * Math.PI/180))) * Math.sin(angle);
+    return [center[0] + deltaLat, center[1] + deltaLon];
+  }
+
+  function getDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371e3;
+    const φ1 = lat1 * Math.PI/180, φ2 = lat2 * Math.PI/180;
+    const Δφ = (lat2-lat1) * Math.PI/180;
+    const Δλ = (lon2-lon1) * Math.PI/180;
+    const a = Math.sin(Δφ/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
+    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+  }
+
+  function getBearing(lat1, lon1, lat2, lon2) {
+    const φ1 = lat1 * Math.PI/180, φ2 = lat2 * Math.PI/180;
+    const Δλ = (lon2-lon1) * Math.PI/180;
+    const y = Math.sin(Δλ) * Math.cos(φ2);
+    const x = Math.cos(φ1)*Math.sin(φ2) - Math.sin(φ1)*Math.cos(φ2)*Math.cos(Δλ);
+    let θ = Math.atan2(y, x) * 180/Math.PI;
+    if(θ<0) θ+=360;
+    return θ;
+  }
+
+  function startRandomWalk() {
+    navigator.geolocation.getCurrentPosition(pos => {
+      center = [pos.coords.latitude, pos.coords.longitude];
+
+      // genereer doelpunt binnen maxDistance
+      goalCoords = getRandomPoint(center, maxDistance);
+
+      // toon richting en afstand
+      updateInfo(center);
+
+      checkProximity();
+    }, err => alert("GPS fout: " + err.message));
+  }
+
+  function updateInfo(playerPos) {
+    const d = getDistance(playerPos[0], playerPos[1], goalCoords[0], goalCoords[1]);
+    const bearing = getBearing(playerPos[0], playerPos[1], goalCoords[0], goalCoords[1]);
+    infoDiv.innerHTML = `Afstand tot doel: ${(d).toFixed(1)} meter<br>Richting: ${bearing.toFixed(0)}°`;
+  }
+
+  function showMap() {
+    document.getElementById("map").style.display = "block";
+    map = L.map('map').setView(center, 17);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+
+    playerMarker = L.marker(center).addTo(map);
+    goalMarker = L.marker(goalCoords, {opacity: 1}).addTo(map).bindPopup("Hier is je doel!").openPopup();
+  }
+
+  function checkProximity() {
+    navigator.geolocation.getCurrentPosition(pos => {
+      const playerPos = [pos.coords.latitude, pos.coords.longitude];
+      updateInfo(playerPos);
+
+      const d = getDistance(playerPos[0], playerPos[1], goalCoords[0], goalCoords[1]);
+
+      if(d <= revealDistance){
+        showMap();
+      } else {
+        setTimeout(checkProximity, 2000);
+      }
+    }, err => console.error("GPS fout:", err));
+  }
+
+  document.getElementById("startBtn").addEventListener("click", startRandomWalk);
+  document.getElementById("restartBtn").addEventListener("click", () => location.reload());
+</script>
+
+</body>
+</html>
